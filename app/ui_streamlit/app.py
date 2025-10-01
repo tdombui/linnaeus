@@ -105,20 +105,59 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         st.exception(e)
         return False
 
+def prepare_data_for_processing(df: pd.DataFrame, column_mapping: Dict[str, str]) -> pd.DataFrame:
+    """Prepare uploaded data by mapping columns and combining text fields."""
+    processed_df = df.copy()
+    
+    # Map columns according to user selection
+    for required_col, user_col in column_mapping.items():
+        if user_col and user_col in processed_df.columns:
+            if required_col != user_col:
+                processed_df[required_col] = processed_df[user_col]
+    
+    # Combine multiple text fields for better analysis
+    text_fields_to_combine = []
+    
+    # Always include description if available
+    if 'description' in processed_df.columns:
+        text_fields_to_combine.append('description')
+    
+    # Add taxonomy fields if they exist
+    for col in ['Main Category', 'Issue', 'Detail', 'subject']:
+        if col in processed_df.columns and col not in text_fields_to_combine:
+            text_fields_to_combine.append(col)
+    
+    # Create combined text field for analysis
+    if text_fields_to_combine:
+        processed_df['combined_text'] = processed_df[text_fields_to_combine].fillna('').agg(' | '.join, axis=1)
+        # Use combined text as description for embedding
+        if 'combined_text' in processed_df.columns:
+            processed_df['description'] = processed_df['combined_text']
+    
+    # Fill missing required columns with defaults
+    defaults = {
+        'channel': 'unknown',
+        'product_line': 'unknown',
+        'region': 'unknown',
+        'language': 'en',
+        'severity': 'medium',
+        'status': 'open'
+    }
+    
+    for col, default_value in defaults.items():
+        if col not in processed_df.columns:
+            processed_df[col] = default_value
+    
+    return processed_df
+
 def upload_page():
     """Page for uploading and processing CSV files."""
     st.header("📤 Upload & Process Tickets")
     
     st.markdown("""
-    Upload a CSV file with your support tickets to automatically classify them.
+    Upload a CSV file with your support tickets. The tool will help you map your columns to the required format.
     
-    **Required columns:**
-    - `case_id` (str, unique)
-    - `created_at` (timestamp)
-    - `subject` (str)
-    - `description` (str)
-    - `channel`, `product_line`, `region`, `language` (str)
-    - `severity`, `status` (str)
+    **Flexible Upload**: Works with any CSV structure - just map your columns!
     """)
     
     st.divider()
@@ -139,17 +178,92 @@ def upload_page():
             st.write(f"**Rows:** {len(df):,}")
             st.write(f"**Columns:** {', '.join(df.columns)}")
             
-            st.dataframe(df.head(10), use_container_width=True)
+            st.dataframe(df.head(5), use_container_width=True)
             
-            # Validate required columns
-            required_cols = ['case_id', 'created_at', 'subject', 'description', 
-                           'channel', 'product_line', 'region', 'language', 'severity', 'status']
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            st.divider()
             
-            if missing_cols:
-                st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+            # Column mapping interface
+            st.subheader("🔗 Map Your Columns")
+            st.markdown("Match your CSV columns to the required fields. Leave blank if you don't have that field.")
+            
+            col1, col2 = st.columns(2)
+            
+            column_mapping = {}
+            available_columns = [''] + list(df.columns)
+            
+            with col1:
+                st.markdown("**🔑 Essential Fields:**")
+                column_mapping['case_id'] = st.selectbox(
+                    "Ticket ID / Case ID *",
+                    available_columns,
+                    index=available_columns.index('case_id') if 'case_id' in available_columns else 0,
+                    help="Unique identifier for each ticket"
+                )
+                
+                column_mapping['subject'] = st.selectbox(
+                    "Subject / Title",
+                    available_columns,
+                    index=available_columns.index('subject') if 'subject' in available_columns else 
+                          available_columns.index('Issue') if 'Issue' in available_columns else 0,
+                    help="Brief description or title"
+                )
+                
+                column_mapping['description'] = st.selectbox(
+                    "Description / Details",
+                    available_columns,
+                    index=available_columns.index('description') if 'description' in available_columns else
+                          available_columns.index('Detail') if 'Detail' in available_columns else 0,
+                    help="Detailed ticket description"
+                )
+                
+                column_mapping['created_at'] = st.selectbox(
+                    "Created Date / Timestamp",
+                    available_columns,
+                    index=available_columns.index('created_at') if 'created_at' in available_columns else 0,
+                    help="When the ticket was created"
+                )
+            
+            with col2:
+                st.markdown("**📊 Optional Fields:**")
+                column_mapping['channel'] = st.selectbox(
+                    "Channel / Source",
+                    available_columns,
+                    index=available_columns.index('channel') if 'channel' in available_columns else 0
+                )
+                
+                column_mapping['product_line'] = st.selectbox(
+                    "Product / Category",
+                    available_columns,
+                    index=available_columns.index('product_line') if 'product_line' in available_columns else
+                          available_columns.index('Main Category') if 'Main Category' in available_columns else 0
+                )
+                
+                column_mapping['severity'] = st.selectbox(
+                    "Severity / Priority",
+                    available_columns,
+                    index=available_columns.index('severity') if 'severity' in available_columns else 0
+                )
+                
+                column_mapping['status'] = st.selectbox(
+                    "Status",
+                    available_columns,
+                    index=available_columns.index('status') if 'status' in available_columns else 0
+                )
+            
+            st.divider()
+            
+            # Show which taxonomy columns will be included
+            taxonomy_cols = [col for col in ['Main Category', 'Issue', 'Detail'] if col in df.columns]
+            if taxonomy_cols:
+                st.success(f"✅ Found taxonomy columns: **{', '.join(taxonomy_cols)}** - These will be included in the analysis!")
+            
+            # Validate essential mappings
+            if not column_mapping.get('case_id'):
+                st.error("❌ Please map the Case ID field (required)")
+            elif not (column_mapping.get('subject') or column_mapping.get('description')):
+                st.error("❌ Please map at least Subject or Description (required for text analysis)")
             else:
-                st.success("✅ All required columns present!")
+                st.success("✅ Ready to process!")
                 
                 st.divider()
                 
@@ -162,11 +276,22 @@ def upload_page():
                 
                 # Process button
                 if st.button("🚀 Process Dataset", type="primary", use_container_width=True):
-                    # Reset file pointer
-                    uploaded_file.seek(0)
+                    # Prepare data with column mapping
+                    prepared_df = prepare_data_for_processing(df, column_mapping)
+                    
+                    # Save prepared data
+                    raw_dir = Path("data/raw")
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    csv_path = raw_dir / f"{dataset_name}.csv"
+                    prepared_df.to_csv(csv_path, index=False)
+                    
+                    # Reset file pointer and create a new file object with prepared data
+                    prepared_file = io.BytesIO()
+                    prepared_df.to_csv(prepared_file, index=False)
+                    prepared_file.seek(0)
                     
                     with st.spinner("Processing dataset... This may take a few minutes."):
-                        success = process_uploaded_file(uploaded_file, dataset_name)
+                        success = process_uploaded_file(prepared_file, dataset_name)
                     
                     if success:
                         st.success("✅ Dataset processed successfully!")
