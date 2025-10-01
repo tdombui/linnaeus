@@ -1,0 +1,22 @@
+[paths]
+raw_dir = "data/raw"
+warehouse_dir = "data/warehouse"
+redacted_dir = "data/redacted"
+artifacts_dir = "artifacts"
+models_dir = "artifacts/models"
+reports_dir = "artifacts/reports"
+
+[privacy]
+redact_pii = true
+send_data_externally = false
+
+[nlp]
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+use_bertopic = true
+min_cluster_size = 3
+
+[classifier]
+confidence_threshold = 0.70
+
+[stopwords]
+extra = ["please","customer","vehicle","issue"]

@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files (too large for git)
+data/raw/*.csv
+data/warehouse/*.parquet
+data/redacted/*.parquet
+
+# Model artifacts (too large for git)
+artifacts/models/*.npy
+artifacts/models/*.bin
+artifacts/models/*.pkl
+
+# Reports (generated files)
+artifacts/reports/*.json
+artifacts/reports/*.html
+artifacts/reports/*.csv
+artifacts/reports/*.parquet
+artifacts/reports/*.png
+
+# Keep directory structure but ignore contents
+!data/raw/.gitkeep
+!data/warehouse/.gitkeep
+!data/redacted/.gitkeep
+!artifacts/models/.gitkeep
+!artifacts/reports/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+

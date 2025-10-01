@@ -1,0 +1,14 @@
+# Starter taxonomy - can be empty to start
+categories:
+  - code: "CONN.CARPLAY_AA"
+    name: "CarPlay/Android Auto"
+    description: "Issues related to CarPlay or Android Auto connectivity"
+  - code: "NAV.UPDATE_FAIL"
+    name: "Map Update Failure"
+    description: "Problems with map updates via USB"
+  - code: "NAV.GPS"
+    name: "GPS Accuracy"
+    description: "GPS positioning and accuracy issues"
+  - code: "CONN.BLUETOOTH"
+    name: "Bluetooth Connection"
+    description: "Bluetooth connectivity problems"

@@ -1,0 +1,5 @@
+rule_id,enabled,pattern,case_sensitive,assign_code,assign_name,confidence,notes
+R001,true,"(carplay|apple carplay|android auto)",false,"CONN.CARPLAY_AA","CarPlay/Android Auto",0.92,"Projection"
+R002,true,"(usb.*map.*update|map.*update.*usb)",false,"NAV.UPDATE_FAIL","Map Update Failure",0.90,"USB map update"
+R003,true,"(gps.*(wrong|inaccur|offset)|position.*off)",false,"NAV.GPS","GPS Accuracy",0.88,"GPS drift"
+R004,true,"(bluetooth|bt).*disconnect",false,"CONN.BLUETOOTH","Bluetooth Connection",0.86,"BT drops"

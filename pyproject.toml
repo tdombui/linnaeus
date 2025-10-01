@@ -1,0 +1,25 @@
+[project]
+name = "ticket-taxonomy-tool"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "pydantic>=2.7",
+    "regex>=2024.4.28",
+    "spacy>=3.7",
+    "scikit-learn>=1.5",
+    "sentence-transformers>=3.0",
+    "umap-learn>=0.5.6",
+    "hdbscan>=0.8.38",
+    "bertopic>=0.16.0",
+    "keybert>=0.8.5",
+    "faiss-cpu>=1.8.0",
+    "streamlit>=1.36",
+    "toml>=0.10.2",
+    "matplotlib>=3.7",
+    "seaborn>=0.12"
+]
+
+[tool.setuptools]
+py-modules = []
