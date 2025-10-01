@@ -1,5 +1,5 @@
 """
-Streamlit UI for reviewing clusters and auto-labels.
+Streamlit UI for ticket classification with file upload and processing.
 """
 import streamlit as st
 import pandas as pd
@@ -8,11 +8,13 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import toml
+import tempfile
+import io
 
 # Configure page
 st.set_page_config(
-    page_title="Linnaeus",
-    page_icon="✨",
+    page_title="Linnaeus - Ticket Taxonomy Tool",
+    page_icon="🎫",
     layout="wide"
 )
 
@@ -33,10 +35,148 @@ def load_taxonomy() -> Dict[str, Any]:
     
     try:
         with open(taxonomy_path, 'r') as f:
-            return yaml.safe_load(f)
+            taxonomy_data = yaml.safe_load(f)
+            return taxonomy_data if taxonomy_data else {}
     except Exception as e:
         st.error(f"Failed to load taxonomy: {e}")
         return {}
+
+def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
+    """Process an uploaded CSV file through the entire pipeline."""
+    try:
+        # Import pipeline modules
+        from app import ingest, redact, embed, discover, rules, classify, export
+        
+        # Create a progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Save uploaded file temporarily
+        status_text.text("📥 Saving uploaded file...")
+        raw_dir = Path("data/raw")
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        
+        csv_path = raw_dir / f"{dataset_name}.csv"
+        with open(csv_path, "wb") as f:
+            f.write(uploaded_file.getvalue())
+        
+        progress_bar.progress(10)
+        
+        # Step 1: Ingest
+        status_text.text("1/7 - 📊 Ingesting CSV data...")
+        warehouse_path = ingest.ingest_csv(str(csv_path), dataset_name)
+        progress_bar.progress(20)
+        
+        # Step 2: Redact PII
+        status_text.text("2/7 - 🔒 Redacting PII...")
+        redacted_path = redact.redact_pii(warehouse_path, dataset_name)
+        progress_bar.progress(35)
+        
+        # Step 3: Generate embeddings
+        status_text.text("3/7 - 🧠 Generating embeddings...")
+        embeddings_path, faiss_path = embed.generate_embeddings(redacted_path, dataset_name)
+        progress_bar.progress(50)
+        
+        # Step 4: Discover topics
+        status_text.text("4/7 - 🎯 Discovering topics...")
+        topics_report = discover.discover_topics(redacted_path, embeddings_path, dataset_name)
+        progress_bar.progress(65)
+        
+        # Step 5: Apply rules
+        status_text.text("5/7 - 📋 Applying classification rules...")
+        with_rules_path = rules.apply_rules(redacted_path, dataset_name)
+        progress_bar.progress(75)
+        
+        # Step 6: Classify tickets
+        status_text.text("6/7 - 🏷️ Classifying tickets...")
+        classified_path = classify.classify_tickets(with_rules_path, embeddings_path, dataset_name)
+        progress_bar.progress(85)
+        
+        # Step 7: Export results
+        status_text.text("7/7 - 📤 Exporting results...")
+        export_paths = export.export_results(classified_path, dataset_name)
+        progress_bar.progress(100)
+        
+        status_text.text("✅ Processing complete!")
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Processing failed: {str(e)}")
+        st.exception(e)
+        return False
+
+def upload_page():
+    """Page for uploading and processing CSV files."""
+    st.header("📤 Upload & Process Tickets")
+    
+    st.markdown("""
+    Upload a CSV file with your support tickets to automatically classify them.
+    
+    **Required columns:**
+    - `case_id` (str, unique)
+    - `created_at` (timestamp)
+    - `subject` (str)
+    - `description` (str)
+    - `channel`, `product_line`, `region`, `language` (str)
+    - `severity`, `status` (str)
+    """)
+    
+    st.divider()
+    
+    # File upload
+    uploaded_file = st.file_uploader(
+        "Choose a CSV file",
+        type=['csv'],
+        help="Upload a CSV file with your support tickets"
+    )
+    
+    if uploaded_file is not None:
+        # Show file preview
+        try:
+            df = pd.read_csv(uploaded_file)
+            
+            st.subheader("📋 File Preview")
+            st.write(f"**Rows:** {len(df):,}")
+            st.write(f"**Columns:** {', '.join(df.columns)}")
+            
+            st.dataframe(df.head(10), use_container_width=True)
+            
+            # Validate required columns
+            required_cols = ['case_id', 'created_at', 'subject', 'description', 
+                           'channel', 'product_line', 'region', 'language', 'severity', 'status']
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            
+            if missing_cols:
+                st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+            else:
+                st.success("✅ All required columns present!")
+                
+                st.divider()
+                
+                # Dataset name input
+                dataset_name = st.text_input(
+                    "Dataset Name",
+                    value="uploaded_data",
+                    help="A name for this dataset (will be used in file names)"
+                )
+                
+                # Process button
+                if st.button("🚀 Process Dataset", type="primary", use_container_width=True):
+                    # Reset file pointer
+                    uploaded_file.seek(0)
+                    
+                    with st.spinner("Processing dataset... This may take a few minutes."):
+                        success = process_uploaded_file(uploaded_file, dataset_name)
+                    
+                    if success:
+                        st.success("✅ Dataset processed successfully!")
+                        st.info("📊 Navigate to the **Clusters Explorer** or **Auto-labels Review** tabs to see results.")
+                        # Force a rerun to refresh the data
+                        st.rerun()
+        
+        except Exception as e:
+            st.error(f"❌ Error reading CSV file: {str(e)}")
+            st.exception(e)
 
 def load_topics_report(reports_dir: Path) -> Optional[Dict[str, Any]]:
     """Load topics report from JSON file."""
@@ -86,16 +226,25 @@ def save_training_labels(df: pd.DataFrame, reports_dir: Path):
     
     try:
         training_df.to_parquet(training_path, index=False)
-        st.success(f"Saved training labels to {training_path}")
+        st.success(f"✅ Saved training labels to {training_path}")
+        
+        # Also offer CSV download
+        csv = training_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Training Labels (CSV)",
+            data=csv,
+            file_name="training_labels.csv",
+            mime="text/csv"
+        )
     except Exception as e:
-        st.error(f"Failed to save training labels: {e}")
+        st.error(f"❌ Failed to save training labels: {e}")
 
 def clusters_explorer_page(topics_report: Dict[str, Any], classified_df: pd.DataFrame):
     """Page for exploring discovered clusters."""
     st.header("🎯 Clusters Explorer")
     
     if not topics_report:
-        st.warning("No topics report found. Run topic discovery first.")
+        st.warning("⚠️ No topics report found. Upload and process a CSV file first.")
         return
     
     metadata = topics_report.get('metadata', {})
@@ -116,53 +265,73 @@ def clusters_explorer_page(topics_report: Dict[str, Any], classified_df: pd.Data
     
     # Display topics
     for i, topic in enumerate(topics):
-        with st.expander(f"Topic {topic['cluster_id']} (Size: {topic['size']})", expanded=i < 3):
+        with st.expander(f"📌 Topic {topic['cluster_id']} - Size: {topic['size']} tickets", expanded=i < 3):
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                st.subheader("Keywords")
+                st.subheader("🔑 Keywords")
                 keywords = topic.get('keywords', [])
                 if keywords:
-                    st.write(", ".join(keywords))
+                    # Display keywords as tags
+                    keyword_html = " ".join([f'<span style="background-color: #e1f5ff; padding: 5px 10px; margin: 2px; border-radius: 5px; display: inline-block;">{kw}</span>' for kw in keywords])
+                    st.markdown(keyword_html, unsafe_allow_html=True)
                 else:
                     st.write("No keywords extracted")
                 
-                st.subheader("Exemplar Case IDs")
+                st.subheader("📋 Exemplar Case IDs")
                 exemplars = topic.get('exemplar_case_ids', [])
                 if exemplars:
-                    for case_id in exemplars:
-                        st.write(f"• {case_id}")
+                    for case_id in exemplars[:5]:  # Show max 5
+                        st.write(f"• `{case_id}`")
                 else:
                     st.write("No exemplars available")
             
             with col2:
-                st.subheader("Sample Tickets")
+                st.subheader("📝 Sample Tickets")
                 if classified_df is not None and exemplars:
                     # Show sample tickets from this cluster
-                    sample_tickets = classified_df[classified_df['case_id'].isin(exemplars)]
+                    sample_tickets = classified_df[classified_df['case_id'].isin(exemplars[:3])]
                     for _, ticket in sample_tickets.iterrows():
-                        st.write(f"**{ticket['case_id']}**")
-                        st.write(f"Subject: {ticket.get('subject_redacted', ticket.get('subject', 'N/A'))[:100]}...")
-                        st.write(f"Predicted: {ticket.get('predicted_name', 'N/A')}")
-                        st.write("---")
+                        with st.container():
+                            st.write(f"**{ticket['case_id']}**")
+                            subject = ticket.get('subject_redacted', ticket.get('subject', 'N/A'))
+                            st.write(f"📧 {subject[:80]}{'...' if len(subject) > 80 else ''}")
+                            pred_name = ticket.get('predicted_name', 'N/A')
+                            conf = ticket.get('confidence', 0)
+                            st.write(f"🏷️ {pred_name} ({conf:.2f})")
+                            st.markdown("---")
 
 def auto_labels_review_page(classified_df: pd.DataFrame, taxonomy: Dict[str, Any]):
     """Page for reviewing and correcting auto-labels."""
     st.header("🏷️ Auto-labels Review")
     
     if classified_df is None:
-        st.warning("No classified data found. Run classification first.")
+        st.warning("⚠️ No classified data found. Upload and process a CSV file first.")
         return
     
-    # Get taxonomy categories for dropdown
-    categories = taxonomy.get('categories', [])
-    category_options = {cat['code']: cat['name'] for cat in categories}
+    # Get available categories from the classified data
+    unique_codes = classified_df['predicted_code'].dropna().unique()
+    unique_names = classified_df['predicted_name'].dropna().unique()
     
-    # Add "Unclassified" option
-    category_options['UNCLASSIFIED'] = 'Unclassified'
+    # Build category options from actual data
+    category_options = {}
+    for code, name in zip(classified_df['predicted_code'].fillna('UNCLASSIFIED'), 
+                         classified_df['predicted_name'].fillna('Unclassified')):
+        if code not in category_options:
+            category_options[code] = name
+    
+    # Add from taxonomy if available
+    if taxonomy and 'categories' in taxonomy:
+        for cat in taxonomy['categories']:
+            if 'code' in cat and 'name' in cat:
+                category_options[cat['code']] = cat['name']
+    
+    # Ensure we have at least an unclassified option
+    if 'UNCLASSIFIED' not in category_options:
+        category_options['UNCLASSIFIED'] = 'Unclassified'
     
     # Filter options
-    st.subheader("Filter Options")
+    st.subheader("🔍 Filter Options")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -180,7 +349,7 @@ def auto_labels_review_page(classified_df: pd.DataFrame, taxonomy: Dict[str, Any
         )
     
     with col3:
-        limit = st.number_input("Number of tickets to review", 1, 1000, 50)
+        limit = st.number_input("Number of tickets to review", 1, 100, 20)
     
     # Apply filters
     filtered_df = classified_df.copy()
@@ -193,35 +362,35 @@ def auto_labels_review_page(classified_df: pd.DataFrame, taxonomy: Dict[str, Any
     # Limit results
     filtered_df = filtered_df.head(limit)
     
-    st.write(f"Showing {len(filtered_df)} tickets for review")
-    
-    # Create editable dataframe
-    st.subheader("Review and Correct Labels")
+    st.info(f"📊 Showing {len(filtered_df)} tickets for review")
     
     # Initialize session state for corrections
     if 'corrections' not in st.session_state:
         st.session_state.corrections = {}
     
+    st.divider()
+    
     # Display tickets for review
     for idx, (_, ticket) in enumerate(filtered_df.iterrows()):
+        case_id = ticket['case_id']
+        
         with st.container():
-            st.write("---")
-            
             col1, col2 = st.columns([3, 1])
             
             with col1:
-                st.write(f"**Case ID:** {ticket['case_id']}")
-                st.write(f"**Subject:** {ticket.get('subject_redacted', ticket.get('subject', 'N/A'))}")
-                st.write(f"**Description:** {ticket.get('description_redacted', ticket.get('description', 'N/A'))[:200]}...")
+                st.markdown(f"### 🎫 {case_id}")
+                st.write(f"**📧 Subject:** {ticket.get('subject_redacted', ticket.get('subject', 'N/A'))}")
                 
-                # Current prediction
-                st.write(f"**Current Prediction:** {ticket.get('predicted_name', 'N/A')} (Confidence: {ticket.get('confidence', 0):.2f})")
+                description = ticket.get('description_redacted', ticket.get('description', 'N/A'))
+                st.write(f"**📝 Description:** {description[:300]}{'...' if len(description) > 300 else ''}")
+                
+                # Current prediction with color coding
+                confidence = ticket.get('confidence', 0)
+                color = "green" if confidence > 0.7 else "orange" if confidence > 0.4 else "red"
+                st.markdown(f"**Current:** <span style='color: {color};'>{ticket.get('predicted_name', 'N/A')} ({confidence:.2f})</span>", unsafe_allow_html=True)
                 st.write(f"**Strategy:** {ticket.get('model_strategy', 'N/A')}")
             
             with col2:
-                # Correction interface
-                case_id = ticket['case_id']
-                
                 # Get current correction or use original prediction
                 current_correction = st.session_state.corrections.get(case_id, ticket.get('predicted_code', 'UNCLASSIFIED'))
                 
@@ -229,34 +398,29 @@ def auto_labels_review_page(classified_df: pd.DataFrame, taxonomy: Dict[str, Any
                 corrected_category = st.selectbox(
                     "Correct Category",
                     list(category_options.keys()),
+                    format_func=lambda x: f"{x}: {category_options[x]}",
                     index=list(category_options.keys()).index(current_correction) if current_correction in category_options else 0,
                     key=f"category_{case_id}"
                 )
                 
-                # Confidence adjustment
-                corrected_confidence = st.slider(
-                    "Confidence",
-                    0.0, 1.0, ticket.get('confidence', 0.5),
-                    key=f"confidence_{case_id}"
-                )
-                
-                # Save correction
-                if st.button("Save Correction", key=f"save_{case_id}"):
+                # Save correction button
+                if st.button("💾 Save", key=f"save_{case_id}", use_container_width=True):
                     st.session_state.corrections[case_id] = corrected_category
-                    st.success("Correction saved!")
+                    st.success("Saved!")
+            
+            st.divider()
     
     # Summary and export
-    st.divider()
-    st.subheader("Review Summary")
+    st.subheader("📊 Review Summary")
     
     num_corrections = len(st.session_state.corrections)
-    st.write(f"Number of corrections made: {num_corrections}")
+    st.write(f"**Corrections made:** {num_corrections}")
     
     if num_corrections > 0:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("Export Training Labels"):
+            if st.button("📤 Export Training Labels", type="primary", use_container_width=True):
                 # Apply corrections to the dataframe
                 corrected_df = classified_df.copy()
                 
@@ -272,19 +436,23 @@ def auto_labels_review_page(classified_df: pd.DataFrame, taxonomy: Dict[str, Any
                 save_training_labels(corrected_df, reports_dir)
         
         with col2:
-            if st.button("Clear All Corrections"):
+            if st.button("🗑️ Clear All Corrections", use_container_width=True):
                 st.session_state.corrections = {}
                 st.rerun()
 
 def main():
     """Main Streamlit app."""
-    st.title("🎫 Ticket Taxonomy Tool")
-    st.markdown("Review clusters and correct auto-labels for ticket classification")
+    st.title("🎫 Linnaeus - Ticket Taxonomy Tool")
+    st.markdown("*Automatically classify support tickets using AI and rule-based matching*")
     
     # Load configuration
     config = load_config()
     if not config:
         st.stop()
+    
+    # Ensure directories exist
+    for dir_key in ['raw_dir', 'warehouse_dir', 'redacted_dir', 'models_dir', 'reports_dir']:
+        Path(config['paths'][dir_key]).mkdir(parents=True, exist_ok=True)
     
     # Load data
     reports_dir = Path(config["paths"]["reports_dir"])
@@ -300,41 +468,52 @@ def main():
     taxonomy = load_taxonomy()
     
     # Create tabs
-    tab1, tab2 = st.tabs(["🎯 Clusters Explorer", "🏷️ Auto-labels Review"])
+    tab1, tab2, tab3 = st.tabs(["📤 Upload & Process", "🎯 Clusters Explorer", "🏷️ Auto-labels Review"])
     
     with tab1:
-        clusters_explorer_page(topics_report, classified_df)
+        upload_page()
     
     with tab2:
+        clusters_explorer_page(topics_report, classified_df)
+    
+    with tab3:
         auto_labels_review_page(classified_df, taxonomy)
     
     # Sidebar with data info
     with st.sidebar:
-        st.header("Data Status")
+        st.header("📊 Data Status")
+        
+        st.write("---")
         
         if topics_report:
             st.success("✅ Topics report loaded")
-            st.write(f"Topics: {topics_report.get('metadata', {}).get('num_topics', 0)}")
+            st.write(f"**Topics:** {topics_report.get('metadata', {}).get('num_topics', 0)}")
         else:
-            st.error("❌ No topics report found")
+            st.warning("⚠️ No topics report")
+            st.caption("Upload a CSV file to get started")
         
         if classified_df is not None:
             st.success("✅ Classified data loaded")
-            st.write(f"Tickets: {len(classified_df):,}")
+            st.write(f"**Tickets:** {len(classified_df):,}")
             
             # Show strategy breakdown
             strategy_counts = classified_df['model_strategy'].value_counts()
             st.write("**Strategy Breakdown:**")
             for strategy, count in strategy_counts.items():
-                st.write(f"• {strategy}: {count:,}")
+                percentage = (count / len(classified_df) * 100)
+                st.write(f"• {strategy}: {count:,} ({percentage:.1f}%)")
         else:
-            st.error("❌ No classified data found")
+            st.warning("⚠️ No classified data")
+            st.caption("Upload a CSV file to get started")
         
-        if taxonomy:
+        if taxonomy and taxonomy.get('categories'):
             st.success("✅ Taxonomy loaded")
-            st.write(f"Categories: {len(taxonomy.get('categories', []))}")
+            st.write(f"**Categories:** {len(taxonomy.get('categories', []))}")
         else:
-            st.warning("⚠️ No taxonomy found")
+            st.info("ℹ️ No taxonomy configured")
+        
+        st.write("---")
+        st.caption("Built with ❤️ using Streamlit")
 
 if __name__ == "__main__":
     main()
