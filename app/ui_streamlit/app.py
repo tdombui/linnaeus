@@ -44,7 +44,14 @@ def load_taxonomy() -> Dict[str, Any]:
 def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
     """Process an uploaded CSV file through the entire pipeline."""
     try:
-        # Import pipeline modules
+        # Import pipeline modules directly
+        import sys
+        import os
+        # Add parent directory to Python path
+        parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        
         from app import ingest, redact, embed, discover, rules, classify, export
         
         # Create a progress bar
