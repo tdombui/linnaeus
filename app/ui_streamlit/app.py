@@ -150,17 +150,32 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         
         # Step 5: Apply rules
         status_text.text("5/7 - 📋 Applying classification rules...")
-        with_rules_path = rules.apply_rules(redacted_path, dataset_name)
+        try:
+            with_rules_path = rules.apply_rules_to_data(redacted_path, dataset_name)
+            st.success("Classification rules applied")
+        except Exception as e:
+            st.error(f"Rules application failed: {e}")
+            return False
         progress_bar.progress(75)
         
         # Step 6: Classify tickets
         status_text.text("6/7 - 🏷️ Classifying tickets...")
-        classified_path = classify.classify_tickets(with_rules_path, embeddings_path, dataset_name)
+        try:
+            classified_path = classify.classify_tickets(with_rules_path, embeddings_path, dataset_name)
+            st.success("Ticket classification completed")
+        except Exception as e:
+            st.error(f"Classification failed: {e}")
+            return False
         progress_bar.progress(85)
         
         # Step 7: Export results
         status_text.text("7/7 - 📤 Exporting results...")
-        export_paths = export.export_results(classified_path, dataset_name)
+        try:
+            export_paths = export.export_results(classified_path, dataset_name)
+            st.success("Results exported successfully")
+        except Exception as e:
+            st.error(f"Export failed: {e}")
+            return False
         progress_bar.progress(100)
         
         status_text.text("✅ Processing complete!")
