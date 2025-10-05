@@ -52,6 +52,19 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
         
+        # Try to setup spaCy model first
+        try:
+            import spacy
+            spacy.load("en_core_web_sm")
+        except OSError:
+            st.warning("Setting up spaCy model... This may take a moment on first run.")
+            try:
+                import subprocess
+                subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+                st.success("spaCy model ready!")
+            except Exception as e:
+                st.warning(f"Could not setup spaCy model: {e}. PII redaction will use regex only.")
+        
         from app import ingest, redact, embed, discover, rules, classify, export
         
         # Create a progress bar

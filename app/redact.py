@@ -38,7 +38,20 @@ class PIIRedactor:
                 self.nlp = spacy.load("en_core_web_sm")
                 logger.info("spaCy model loaded successfully")
             except OSError:
-                logger.warning("spaCy model not found. Run: python -m spacy download en_core_web_sm")
+                # Try to download the model if it's not available
+                try:
+                    import subprocess
+                    import sys
+                    logger.info("Attempting to download spaCy model...")
+                    subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+                    self.nlp = spacy.load("en_core_web_sm")
+                    logger.info("spaCy model downloaded and loaded successfully")
+                except Exception as e:
+                    logger.warning(f"Could not load spaCy model: {e}. Continuing without spaCy NER.")
+                    self.use_spacy = False
+                    self.nlp = None
+            except Exception as e:
+                logger.warning(f"Error loading spaCy: {e}. Continuing without spaCy NER.")
                 self.use_spacy = False
                 self.nlp = None
     
