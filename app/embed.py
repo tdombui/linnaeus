@@ -76,15 +76,15 @@ class EmbeddingGenerator:
         logger.info(f"FAISS index built with {index.ntotal} vectors")
         return index
     
-    def save_embeddings(self, embeddings: np.ndarray, output_dir: Path):
+    def save_embeddings(self, embeddings: np.ndarray, output_dir: Path, filename: str = "embeddings.npy"):
         """Save embeddings to numpy file."""
-        embeddings_path = output_dir / "embeddings.npy"
+        embeddings_path = output_dir / filename
         np.save(embeddings_path, embeddings)
         logger.info(f"Saved embeddings to {embeddings_path}")
     
-    def save_faiss_index(self, index: faiss.Index, output_dir: Path):
+    def save_faiss_index(self, index: faiss.Index, output_dir: Path, filename: str = "faiss_index.bin"):
         """Save FAISS index to file."""
-        index_path = output_dir / "faiss_index.bin"
+        index_path = output_dir / filename
         faiss.write_index(index, str(index_path))
         logger.info(f"Saved FAISS index to {index_path}")
     
@@ -144,21 +144,12 @@ def process_embeddings(input_path: str, output_name: str = "dataset") -> Tuple[s
     # Build FAISS index
     faiss_index = generator.build_faiss_index(embeddings)
     
-    # Save embeddings and index
-    embeddings_path = models_dir / f"{output_name}_embeddings.npy"
-    index_path = models_dir / f"{output_name}_faiss_index.bin"
-    
-    generator.save_embeddings(embeddings, models_dir)
-    generator.save_faiss_index(faiss_index, models_dir)
-    
-    # Rename files to include output_name
+    # Save embeddings and index with correct filenames
     final_embeddings_path = models_dir / f"{output_name}_embeddings.npy"
     final_index_path = models_dir / f"{output_name}_faiss_index.bin"
     
-    if embeddings_path != final_embeddings_path:
-        embeddings_path.rename(final_embeddings_path)
-    if index_path != final_index_path:
-        index_path.rename(final_index_path)
+    generator.save_embeddings(embeddings, models_dir, f"{output_name}_embeddings.npy")
+    generator.save_faiss_index(faiss_index, models_dir, f"{output_name}_faiss_index.bin")
     
     logger.info(f"Embeddings saved to: {final_embeddings_path}")
     logger.info(f"FAISS index saved to: {final_index_path}")

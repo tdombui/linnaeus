@@ -130,12 +130,22 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         
         # Step 3: Generate embeddings
         status_text.text("3/7 - 🧠 Generating embeddings...")
-        embeddings_path, faiss_path = embed.process_embeddings(redacted_path, dataset_name)
+        try:
+            embeddings_path, faiss_path = embed.process_embeddings(redacted_path, dataset_name)
+            st.success(f"Embeddings generated: {embeddings_path}")
+        except Exception as e:
+            st.error(f"Embeddings generation failed: {e}")
+            return False
         progress_bar.progress(50)
         
         # Step 4: Discover topics
         status_text.text("4/7 - 🎯 Discovering topics...")
-        topics_report = discover.discover_topics(redacted_path, embeddings_path, dataset_name)
+        try:
+            topics_report = discover.discover_topics(redacted_path, embeddings_path, dataset_name)
+            st.success("Topic discovery completed")
+        except Exception as e:
+            st.error(f"Topic discovery failed: {e}")
+            return False
         progress_bar.progress(65)
         
         # Step 5: Apply rules
