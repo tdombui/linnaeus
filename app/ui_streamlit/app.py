@@ -179,6 +179,62 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         progress_bar.progress(100)
         
         status_text.text("✅ Processing complete!")
+        
+        # Display results and download links
+        st.success("🎉 Analysis Complete! Your results are ready.")
+        
+        # Show export paths
+        if export_paths:
+            st.subheader("📊 Your Reports")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**📈 Summary Reports**")
+                if 'summary_html_path' in export_paths and export_paths['summary_html_path']:
+                    with open(export_paths['summary_html_path'], 'rb') as f:
+                        st.download_button(
+                            label="📊 Summary Dashboard",
+                            data=f.read(),
+                            file_name="summary_dashboard.html",
+                            mime="text/html"
+                        )
+                
+                if 'evaluation_html' in export_paths and export_paths['evaluation_html']:
+                    with open(export_paths['evaluation_html'], 'rb') as f:
+                        st.download_button(
+                            label="📈 Detailed Analysis",
+                            data=f.read(),
+                            file_name="detailed_analysis.html",
+                            mime="text/html"
+                        )
+            
+            with col2:
+                st.markdown("**📋 Data Files**")
+                if 'csv_path' in export_paths and export_paths['csv_path']:
+                    with open(export_paths['csv_path'], 'rb') as f:
+                        st.download_button(
+                            label="📄 Classified Tickets (CSV)",
+                            data=f.read(),
+                            file_name="classified_tickets.csv",
+                            mime="text/csv"
+                        )
+                
+                if 'parquet_path' in export_paths and export_paths['parquet_path']:
+                    with open(export_paths['parquet_path'], 'rb') as f:
+                        st.download_button(
+                            label="📦 Classified Tickets (Parquet)",
+                            data=f.read(),
+                            file_name="classified_tickets.parquet",
+                            mime="application/octet-stream"
+                        )
+            
+            # Show file paths for reference
+            st.markdown("**📁 File Locations:**")
+            for file_type, path in export_paths.items():
+                if path:
+                    st.text(f"{file_type}: {path}")
+        
         return True
         
     except Exception as e:
