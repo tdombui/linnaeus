@@ -1,4 +1,11 @@
-# Ticket Taxonomy Tool
+# 🎫 Linnaeus - Ticket Taxonomy Tool
+
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Online-blue)](https://linnaeus.streamlit.app/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+**An AI-powered tool that automatically organizes and categorizes your support tickets.**
+
+> 📚 **[📖 Complete User Guide](USER_GUIDE.md)** - Everything you need to know, written for beginners!
 
 A comprehensive tool for automatically classifying support tickets using a combination of rule-based matching and machine learning. The tool processes CSV ticket data, applies PII redaction, generates embeddings, discovers topic clusters, and provides an interactive UI for reviewing and correcting classifications.
 
