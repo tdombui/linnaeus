@@ -65,7 +65,32 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
             except Exception as e:
                 st.warning(f"Could not setup spaCy model: {e}. PII redaction will use regex only.")
         
-        from app import ingest, redact, embed, discover, rules, classify, export
+        # Import modules directly from the app directory
+        import importlib.util
+        
+        # Define module paths
+        modules_to_import = ['ingest', 'redact', 'embed', 'discover', 'rules', 'classify', 'export']
+        imported_modules = {}
+        
+        for module_name in modules_to_import:
+            module_path = os.path.join(parent_dir, 'app', f'{module_name}.py')
+            if os.path.exists(module_path):
+                spec = importlib.util.spec_from_file_location(module_name, module_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                imported_modules[module_name] = module
+            else:
+                st.error(f"Could not find module: {module_name}")
+                return False
+        
+        # Extract modules
+        ingest = imported_modules['ingest']
+        redact = imported_modules['redact']
+        embed = imported_modules['embed']
+        discover = imported_modules['discover']
+        rules = imported_modules['rules']
+        classify = imported_modules['classify']
+        export = imported_modules['export']
         
         # Create a progress bar
         progress_bar = st.progress(0)
