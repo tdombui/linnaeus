@@ -112,14 +112,25 @@ def process_uploaded_file(uploaded_file, dataset_name: str) -> bool:
         warehouse_path = ingest.ingest_csv(str(csv_path), dataset_name)
         progress_bar.progress(20)
         
-        # Step 2: Redact PII
+        # Step 2: Redact PII (optional)
         status_text.text("2/7 - 🔒 Redacting PII...")
-        redacted_path = redact.redact_pii(warehouse_path, dataset_name)
+        
+        # Check if user wants to skip PII redaction for faster processing
+        if st.session_state.get('skip_pii_redaction', False):
+            redacted_path = warehouse_path
+            st.info("⏭️ Skipped PII redaction for faster processing")
+        else:
+            try:
+                redacted_path = redact.redact_parquet(warehouse_path, dataset_name)
+            except Exception as e:
+                st.warning(f"PII redaction failed: {e}. Continuing without redaction...")
+                redacted_path = warehouse_path
+        
         progress_bar.progress(35)
         
         # Step 3: Generate embeddings
         status_text.text("3/7 - 🧠 Generating embeddings...")
-        embeddings_path, faiss_path = embed.generate_embeddings(redacted_path, dataset_name)
+        embeddings_path, faiss_path = embed.process_embeddings(redacted_path, dataset_name)
         progress_bar.progress(50)
         
         # Step 4: Discover topics
@@ -319,8 +330,22 @@ def upload_page():
                     help="A name for this dataset (will be used in file names)"
                 )
                 
+                # Processing options
+                col1, col2 = st.columns(2)
+                with col1:
+                    skip_pii = st.checkbox(
+                        "Skip PII Redaction", 
+                        value=False,
+                        help="Skip PII redaction for faster processing (less privacy protection)"
+                    )
+                with col2:
+                    st.info("💡 Tip: Skip PII redaction for faster processing on large files")
+                
                 # Process button
                 if st.button("🚀 Process Dataset", type="primary", use_container_width=True):
+                    # Store the skip_pii option in session state
+                    st.session_state['skip_pii_redaction'] = skip_pii
+                    
                     # Prepare data with column mapping
                     prepared_df = prepare_data_for_processing(df, column_mapping)
                     
