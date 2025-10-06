@@ -42,31 +42,51 @@ def load_config() -> Dict[str, Any]:
     return toml.load(config_path)
 
 def validate_required_columns(df: pd.DataFrame) -> None:
-    """Validate that required columns are present."""
-    required_columns = [
-        "case_id", "created_at", "subject", "description", 
-        "channel", "product_line", "region", "language", 
-        "severity", "status"
-    ]
+    """Validate that essential columns are present."""
+    # Only require truly essential columns
+    essential_columns = ["case_id", "subject", "description"]
     
-    missing_columns = [col for col in required_columns if col not in df.columns]
+    missing_columns = [col for col in essential_columns if col not in df.columns]
     if missing_columns:
-        raise ValueError(f"Missing required columns: {missing_columns}")
+        raise ValueError(f"Missing essential columns: {missing_columns}")
+    
+    # Check for optional columns and warn if missing
+    optional_columns = ["created_at", "channel", "product_line", "region", "language", "severity", "status"]
+    missing_optional = [col for col in optional_columns if col not in df.columns]
+    
+    if missing_optional:
+        logger.warning(f"Missing optional columns (will use defaults): {missing_optional}")
 
 def cast_types(df: pd.DataFrame) -> pd.DataFrame:
-    """Cast columns to appropriate types."""
+    """Cast columns to appropriate types and add defaults for missing columns."""
     # Ensure case_id is string and unique
     df["case_id"] = df["case_id"].astype(str)
     
-    # Convert created_at to datetime
-    df["created_at"] = pd.to_datetime(df["created_at"], utc=True)
+    # Handle created_at - add default if missing
+    if "created_at" not in df.columns:
+        df["created_at"] = pd.Timestamp.now(tz='UTC')
+        logger.info("Added default created_at timestamp")
+    else:
+        df["created_at"] = pd.to_datetime(df["created_at"], utc=True)
     
-    # Ensure text fields are strings
+    # Ensure text fields are strings and add defaults for missing ones
     text_columns = ["subject", "description", "channel", "product_line", 
                    "region", "language", "severity", "status"]
+    defaults = {
+        "channel": "unknown",
+        "product_line": "unknown", 
+        "region": "unknown",
+        "language": "en",
+        "severity": "medium",
+        "status": "open"
+    }
+    
     for col in text_columns:
         if col in df.columns:
             df[col] = df[col].astype(str)
+        elif col in defaults:
+            df[col] = defaults[col]
+            logger.info(f"Added default value for missing column: {col}")
     
     # Optional fields
     optional_columns = ["current_category", "resolution_code", "close_reason", "agent_team"]
