@@ -1,21 +1,18 @@
-# 🎫 Linnaeus - Ticket Taxonomy Tool
-
+LINNAEUS
 [![Streamlit App](https://img.shields.io/badge/Streamlit-Online-blue)](https://linnaeus.streamlit.app/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-**An AI-powered tool that automatically organizes and categorizes your support tickets.**
+**organizes and categorizes your support tickets**
 
-> 📚 **[📖 Complete User Guide](USER_GUIDE.md)** - Everything you need to know, written for beginners!
+> **[📖 Complete User Guide](USER_GUIDE.md)** - Everything you need to know, written for beginners!
 
 A comprehensive tool for automatically classifying support tickets using a combination of rule-based matching and machine learning. The tool processes CSV ticket data, applies PII redaction, generates embeddings, discovers topic clusters, and provides an interactive UI for reviewing and correcting classifications.
 
 ---
 
-## 🚀 Quick Start for Beginners (Total Code Noobs Welcome!)
+## STEP 1 - SET UP ENV
 
-### Step 1: Set Up Your Environment (One-Time Setup)
-
-**Windows PowerShell:**
+**POWERSHELL:**
 ```powershell
 # Navigate to the project folder
 cd C:\Users\tdomb\Desktop\Code\linnaeus
@@ -136,12 +133,12 @@ taskkill /F /IM python.exe
 
 ---
 
-**🎯 Which Option Should You Use?**
+**OPTIONS**
 
 | Option | Best For | Interactive? |
 |--------|----------|--------------|
-| **HTML Reports** | Viewing metrics, sharing results | ❌ Static |
-| **Streamlit UI** | Correcting classifications, active learning | ✅ Interactive |
+| **HTML Reports** | Viewing metrics, sharing results | Static |
+| **Streamlit UI** | Correcting classifications, active learning |  Interactive |
 
 **Typical Workflow:**
 1. Run the command-line pipeline (Step 2) to process all tickets
